@@ -1,0 +1,174 @@
+name: Android APK CI
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        run: |
+          export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH
+
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd $ANDROID_SDK_ROOT/cmdline-tools
+
+          if [ ! -d "latest" ]; then
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+            unzip -q tools.zip
+            mv cmdline-tools latest
+          fi
+
+          yes | sdkmanager --licenses
+
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-34"
+          sdkmanager "build-tools;34.0.0"
+
+      - name: Generate project
+        run: |
+          mkdir -p app/src/main/java/com/af/client
+          mkdir -p app/src/main
+
+          # settings.gradle
+          printf 'pluginManagement {\n' > settings.gradle
+          printf '    repositories {\n' >> settings.gradle
+          printf '        google()\n' >> settings.gradle
+          printf '        mavenCentral()\n' >> settings.gradle
+          printf '        gradlePluginPortal()\n' >> settings.gradle
+          printf '    }\n' >> settings.gradle
+          printf '}\n' >> settings.gradle
+
+          printf '\n' >> settings.gradle
+          printf 'dependencyResolutionManagement {\n' >> settings.gradle
+          printf '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n' >> settings.gradle
+          printf '    repositories {\n' >> settings.gradle
+          printf '        google()\n' >> settings.gradle
+          printf '        mavenCentral()\n' >> settings.gradle
+          printf '    }\n' >> settings.gradle
+          printf '}\n' >> settings.gradle
+
+          printf '\nrootProject.name = "af_client"\n' >> settings.gradle
+          printf "include ':app'\n" >> settings.gradle
+
+          # root build.gradle
+          printf "plugins {\n" > build.gradle
+          printf "    id 'com.android.application' version '8.1.0' apply false\n" >> build.gradle
+          printf "    id 'org.jetbrains.kotlin.android' version '1.9.0' apply false\n" >> build.gradle
+          printf "}\n" >> build.gradle
+
+          # app build.gradle
+          printf "plugins {\n" > app/build.gradle
+          printf "    id 'com.android.application'\n" >> app/build.gradle
+          printf "    id 'org.jetbrains.kotlin.android'\n" >> app/build.gradle
+          printf "}\n" >> app/build.gradle
+
+          printf "android {\n" >> app/build.gradle
+          printf "    namespace \"com.af.client\"\n" >> app/build.gradle
+          printf "    compileSdk 34\n" >> app/build.gradle
+
+          printf "    defaultConfig {\n" >> app/build.gradle
+          printf "        applicationId \"com.af.client\"\n" >> app/build.gradle
+          printf "        minSdk 24\n" >> app/build.gradle
+          printf "        targetSdk 34\n" >> app/build.gradle
+          printf "        versionCode 1\n" >> app/build.gradle
+          printf "        versionName \"1.0\"\n" >> app/build.gradle
+          printf "    }\n" >> app/build.gradle
+
+          printf "    buildTypes {\n" >> app/build.gradle
+          printf "        debug { minifyEnabled false }\n" >> app/build.gradle
+          printf "    }\n" >> app/build.gradle
+
+          printf "    compileOptions {\n" >> app/build.gradle
+          printf "        sourceCompatibility JavaVersion.VERSION_17\n" >> app/build.gradle
+          printf "        targetCompatibility JavaVersion.VERSION_17\n" >> app/build.gradle
+          printf "    }\n" >> app/build.gradle
+
+          printf "    kotlinOptions {\n" >> app/build.gradle
+          printf "        jvmTarget = \"17\"\n" >> app/build.gradle
+          printf "    }\n" >> app/build.gradle
+
+          printf "}\n" >> app/build.gradle
+          printf "dependencies {}\n" >> app/build.gradle
+
+          # ✅ Manifest FIX
+          printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' > app/src/main/AndroidManifest.xml
+          printf '  <uses-permission android:name="android.permission.INTERNET"/>\n' >> app/src/main/AndroidManifest.xml
+
+          printf '  <application android:label="AF Client" android:usesCleartextTraffic="true">\n' >> app/src/main/AndroidManifest.xml
+          printf '    <activity android:name=".MainActivity" android:exported="true">\n' >> app/src/main/AndroidManifest.xml
+          printf '      <intent-filter>\n' >> app/src/main/AndroidManifest.xml
+          printf '        <action android:name="android.intent.action.MAIN"/>\n' >> app/src/main/AndroidManifest.xml
+          printf '        <category android:name="android.intent.category.LAUNCHER"/>\n' >> app/src/main/AndroidManifest.xml
+          printf '      </intent-filter>\n' >> app/src/main/AndroidManifest.xml
+          printf '    </activity>\n' >> app/src/main/AndroidManifest.xml
+          printf '  </application>\n' >> app/src/main/AndroidManifest.xml
+          printf '</manifest>\n' >> app/src/main/AndroidManifest.xml
+
+          # ✅ Activity с HTTP запросом
+          printf 'package com.af.client\n\n' > app/src/main/java/com/af/client/MainActivity.kt
+
+          printf 'import android.app.Activity\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf 'import android.os.Bundle\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf 'import android.widget.TextView\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf 'import java.net.URL\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf 'import kotlin.concurrent.thread\n\n' >> app/src/main/java/com/af/client/MainActivity.kt
+
+          printf 'class MainActivity : Activity() {\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '    override fun onCreate(savedInstanceState: Bundle?) {\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '        super.onCreate(savedInstanceState)\n\n' >> app/src/main/java/com/af/client/MainActivity.kt
+
+          printf '        val tv = TextView(this)\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '        tv.text = "Connecting..."\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '        setContentView(tv)\n\n' >> app/src/main/java/com/af/client/MainActivity.kt
+
+          printf '        thread {\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '            try {\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '                val response = URL("http://127.0.0.1:8080/cmd?cmd=wifi").readText()\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '                runOnUiThread { tv.text = response }\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '            } catch (e: Exception) {\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '                runOnUiThread { tv.text = "Error: " + e.message }\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '            }\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '        }\n' >> app/src/main/java/com/af/client/MainActivity.kt
+
+          printf '    }\n' >> app/src/main/java/com/af/client/MainActivity.kt
+          printf '}\n' >> app/src/main/java/com/af/client/MainActivity.kt
+
+          printf "sdk.dir=$ANDROID_SDK_ROOT\n" > local.properties
+
+      - name: Setup Gradle
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip curl
+
+          curl -L https://services.gradle.org/distributions/gradle-8.3-bin.zip -o gradle.zip
+          unzip -q gradle.zip
+          mv gradle-8.3 gradle
+          chmod +x gradle/bin/gradle
+
+      - name: Build APK
+        run: |
+          export PATH=$ANDROID_SDK_ROOT/platform-tools:$PATH
+          ./gradle/bin/gradle assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/*.apk
